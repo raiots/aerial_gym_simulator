@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
+print("Importing torch and torch.nn")
 import ai_edge_torch
+print("Importing ai_edge_torch")
 
 class e2eNetwork(nn.Module):
     def __init__(self):
@@ -17,8 +19,9 @@ class e2eNetwork(nn.Module):
         return x
 
 def convert_network():
+    print("Converting network...")
     # Load the state dictionary. TODO: Change the model name to match the one you have trained
-    state_dict = torch.load("gen_ppo.pth", map_location=torch.device('cpu'))
+    state_dict = torch.load("/programming/gen_ppo.pth", map_location=torch.device('cpu'))
     # Extract the model state dictionary
     model_state_dict = state_dict["model"]
 
