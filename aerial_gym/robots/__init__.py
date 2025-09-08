@@ -48,7 +48,8 @@ robot_registry.register("lmf1", BaseMultirotor, LMF1Cfg)
 robot_registry.register("lmf2", BaseMultirotor, LMF2Cfg)
 
 robot_registry.register("tinyprop", BaseMultirotor, TinyPropCfg)
-robot_registry.register("trirotor", BaseMultirotor, TrirotorCfg)
+# Trirotor has tilt joints; use BaseReconfigurable to expose DOF control
+robot_registry.register("trirotor", BaseReconfigurable, TrirotorCfg)
 
 # register the special robot classes here for working with the examples
 robot_registry.register("base_quadrotor_with_imu", BaseMultirotor, BaseQuadWithImuCfg)
@@ -59,4 +60,3 @@ robot_registry.register("base_quadrotor_with_faceid_normal_camera", BaseMultirot
 robot_registry.register("base_quadrotor_with_stereo_camera", BaseMultirotor, BaseQuadWithStereoCameraCfg)
 
 robot_registry.register("tinyprop", BaseMultirotor, TinyPropCfg)
-

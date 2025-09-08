@@ -46,6 +46,8 @@ class TrirotorCfg:
             0.5,
             0.5,
         ]
+        # min_init_state = [-1e-6] * 14
+        # max_init_state = [1e-6] * 14
 
     class sensor_config:
         enable_camera = False
@@ -56,6 +58,22 @@ class TrirotorCfg:
 
         enable_imu = False
         imu_config = BaseImuConfig
+
+    class reconfiguration_config:
+        # Control the three tilt joints (one per motor)
+        # Use position mode to command joint targets directly
+        dof_mode = "position"  # "position", "velocity" or "effort"
+        init_state_min = [
+            [-0.05, -0.05, -0.05],  # joint position [rad]
+            [-0.05, -0.05, -0.05],  # joint velocity [rad/s]
+        ]
+        init_state_max = [
+            [0.05, 0.05, 0.05],     # joint position [rad]
+            [0.05, 0.05, 0.05],     # joint velocity [rad/s]
+        ]
+        # Stiffness/damping applied by Isaac Gym when in position/velocity mode
+        stiffness = [4.0, 4.0, 4.0]
+        damping = [0.2, 0.2, 0.2]
 
     class disturbance:
         enable_disturbance = False 

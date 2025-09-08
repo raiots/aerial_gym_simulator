@@ -93,6 +93,10 @@ class PositionSetpointTaskSim2RealEndToEnd(BaseTask):
         self.truncations = self.obs_dict["truncations"]
         self.rewards = torch.zeros(self.truncations.shape[0], device=self.device)
         self.prev_position = torch.zeros_like(self.obs_dict["robot_position"])
+        # Compute hover thrust per motor from robot mass and number of actions
+        self.hover_thrust_per_motor = (
+            9.81 * self.obs_dict["robot_mass"] / float(self.task_config.action_space_dim)
+        )
 
         self.prev_pos_error = torch.zeros((self.sim_env.num_envs, 3), device=self.device, requires_grad=False)
 
@@ -248,7 +252,8 @@ class PositionSetpointTaskSim2RealEndToEnd(BaseTask):
             action_input.clone(),
             self.prev_actions,
             self.prev_pos_error,
-            self.task_config.crash_dist
+            self.task_config.crash_dist,
+            self.hover_thrust_per_motor,
         )
 
 
@@ -273,7 +278,8 @@ def compute_reward(
                      action_input,
                      prev_action,
                      prev_pos_error,
-                     crash_dist):
+                     crash_dist,
+                     hover_thrust_per_motor):
 
     target_dist = torch.norm(pos_error[:, :3], dim=1)
 
@@ -293,7 +299,8 @@ def compute_reward(
     angvel_reward = torch.sum(exp_func(angvels_err, .3 , 10.0), dim=1)
     vel_reward = torch.sum(exp_func(linvels_err, 1., 5.0), dim=1)
 
-    action_input_offset = action_input - 9.81 * 0.372/4
+    # Penalize deviation from hover thrust per motor
+    action_input_offset = action_input - hover_thrust_per_motor.unsqueeze(1)
     action_cost = torch.sum(exp_penalty_func(action_input_offset, 0.01, 10.0), dim=1)
 
     closer_by_dist = prev_target_dist - target_dist
@@ -307,5 +314,4 @@ def compute_reward(
     crashes[:] = torch.where(target_dist > crash_dist, torch.ones_like(crashes), crashes)
 
     return reward, crashes
-
 

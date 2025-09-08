@@ -10,3 +10,5 @@ nn/
 
 train_dir/
 venv/
+wandb/
+.vscode/

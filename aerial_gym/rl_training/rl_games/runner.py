@@ -145,6 +145,16 @@ env_configurations.register(
     },
 )
 
+env_configurations.register(
+    "position_setpoint_task_trirotor_6d",
+    {
+        "env_creator": lambda **kwargs: task_registry.make_task(
+            "position_setpoint_task_trirotor_6d", **kwargs
+        ),
+        "vecenv_type": "AERIAL-RLGPU",
+    },
+)
+
 vecenv.register(
     "AERIAL-RLGPU",
     lambda config_name, num_actors, **kwargs: AERIALRLGPUEnv(config_name, num_actors, **kwargs),

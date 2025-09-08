@@ -31,10 +31,14 @@ class BaseMultirotor(BaseRobot):
         )
         logger.warning(f"Creating {self.num_envs} multirotors.")
         self.force_application_level = self.cfg.control_allocator_config.force_application_level
+        # Determine controller output mode. Default is wrench except for no_control
         if controller_name == "no_control":
             self.output_mode = "forces"
         else:
             self.output_mode = "wrench"
+        # Allow controllers to override the output mode explicitly
+        if hasattr(self.controller, "output_mode"):
+            self.output_mode = getattr(self.controller, "output_mode")
 
         if self.force_application_level == "root_link" and controller_name == "no_control":
             raise ValueError(

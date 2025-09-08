@@ -6,6 +6,8 @@ logger = CustomLogger("no_control")
 
 class NoControl:
     def __init__(self, config, num_envs, device):
+        # Provide output mode hint to BaseMultirotor
+        self.output_mode = "forces"
         pass
 
     def init_tensors(self, global_tensor_dict=None):

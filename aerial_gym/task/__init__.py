@@ -27,6 +27,9 @@ from aerial_gym.config.task_config.position_setpoint_task_sim2real_config import
 from aerial_gym.config.task_config.position_setpoint_task_sim2real_end_to_end_config import (
     task_config as position_setpoint_task_sim2real_end_to_end_config,
 )
+from aerial_gym.config.task_config.position_setpoint_task_trirotor_6d_config import (
+    task_config as position_setpoint_task_trirotor_6d_config,
+)
 
 from aerial_gym.config.task_config.position_setpoint_task_acceleration_sim2real_config import (
     task_config as position_setpoint_task_acceleration_sim2real_config,
@@ -52,6 +55,12 @@ task_registry.register_task(
     "position_setpoint_task_sim2real_end_to_end",
     PositionSetpointTaskSim2RealEndToEnd,
     position_setpoint_task_sim2real_end_to_end_config,
+)
+
+task_registry.register_task(
+    "position_setpoint_task_trirotor_6d",
+    PositionSetpointTaskSim2RealEndToEnd,
+    position_setpoint_task_trirotor_6d_config,
 )
 
 task_registry.register_task(
