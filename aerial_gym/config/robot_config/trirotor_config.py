@@ -182,3 +182,16 @@ class TrirotorCfg:
             thrust_to_torque_ratio = 0.01
             use_discrete_approximation = True
             integration_scheme = "rk4" #"euler"
+
+    class aerodynamic_config:
+        enable_wind = True
+        air_density = 1.225  # kg/m^3
+        reference_area = 0.005  # m^2, effective frontal area
+        # Lift/drag simple model coefficients
+        cl_alpha = 2.0        # per rad
+        cd0 = 0.05
+        cd_alpha2 = 0.30
+        # Fixed wind in world frame (wind from +X direction)
+        wind_dir_world = [1.0, 0.0, 0.0]
+        wind_speed_min = 0.0  # m/s
+        wind_speed_max = 20.0 # m/s

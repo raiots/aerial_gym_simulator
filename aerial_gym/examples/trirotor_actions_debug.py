@@ -26,7 +26,7 @@ if __name__ == "__main__":
     env_manager = SimBuilder().build_env(
         sim_name="base_sim_no_gravity",
         env_name="empty_env",
-        robot_name="trirotor",
+        robot_name="trirotor_wind",
         controller_name="servo_thrust_split_trirotor",
         args=None,
         device=args.sim_device,
