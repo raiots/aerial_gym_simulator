@@ -93,12 +93,34 @@ class PositionSetpointTaskSim2RealEndToEnd(BaseTask):
         self.truncations = self.obs_dict["truncations"]
         self.rewards = torch.zeros(self.truncations.shape[0], device=self.device)
         self.prev_position = torch.zeros_like(self.obs_dict["robot_position"])
-        # Compute hover thrust per motor from robot mass and number of actions
+        # Compute hover thrust per motor from robot mass and actual number of motors
+        # In 6D setups (servo+thrust), only the last N entries are motor thrusts.
+        try:
+            num_motors = (
+                self.sim_env.robot_manager.robot.control_allocator.cfg.num_motors
+            )
+        except Exception:
+            # Fallback: if action_space_dim > 3 assume last half are motors
+            num_motors = (
+                self.task_config.action_space_dim
+                if self.task_config.action_space_dim <= 3
+                else max(1, self.task_config.action_space_dim // 2)
+            )
         self.hover_thrust_per_motor = (
-            9.81 * self.obs_dict["robot_mass"] / float(self.task_config.action_space_dim)
+            9.81 * self.obs_dict["robot_mass"] / float(num_motors)
         )
 
         self.prev_pos_error = torch.zeros((self.sim_env.num_envs, 3), device=self.device, requires_grad=False)
+
+        # Optional debug logging interval for first-agent motor thrusts (0 disables)
+        self.log_first_agent_thrust_every_n_steps = getattr(
+            self.task_config, "log_first_agent_thrust_every_n_steps", 0
+        )
+
+        # If wind is available, extend observation dimension by 1
+        self.include_wind_in_obs = "wind_speed" in self.obs_dict
+        if self.include_wind_in_obs:
+            self.task_config.observation_space_dim += 1
 
         self.observation_space = Dict(
             {"observations": Box(low=-1.0, high=1.0, shape=(self.task_config.observation_space_dim,), dtype=np.float32)}
@@ -168,7 +190,7 @@ class PositionSetpointTaskSim2RealEndToEnd(BaseTask):
         self.counter += 1
         self.actions = self.task_config.process_actions_for_task(
             actions, self.task_config.action_limit_min, self.task_config.action_limit_max
-        )
+        )  # actions which have been processed
         self.prev_position[:] = self.obs_dict["robot_position"].clone()
 
         self.sim_env.step(actions=self.actions)
@@ -192,6 +214,26 @@ class PositionSetpointTaskSim2RealEndToEnd(BaseTask):
 
         self.prev_actions = self.actions.clone()
         self.prev_pos_error = self.target_position - self.obs_dict["robot_position"]
+
+        # Debug-log actual motor thrusts for first agent at configured interval
+        if (
+            self.log_first_agent_thrust_every_n_steps
+            and self.counter % self.log_first_agent_thrust_every_n_steps == 0
+        ):
+            try:
+                mt = self.obs_dict.get("motor_thrusts", None)
+                mt_cmd = self.obs_dict.get("motor_thrusts_cmd", None)
+                if mt is not None and mt.shape[0] > 0:
+                    if mt_cmd is not None and mt_cmd.shape[0] > 0:
+                        logger.info(
+                            f"step={self.counter} thrusts[0]={mt[0].tolist()} thrusts_cmd[0]={mt_cmd[0].tolist()} cmd_actions[0]={self.actions[0].tolist()} hover_per_motor={self.hover_thrust_per_motor[0].item():.4f} mass={self.obs_dict['robot_mass'][0].item():.3f}"
+                        )
+                    else:
+                        logger.info(
+                            f"step={self.counter} thrusts[0]={mt[0].tolist()} cmd_actions[0]={self.actions[0].tolist()} hover_per_motor={self.hover_thrust_per_motor[0].item():.4f} mass={self.obs_dict['robot_mass'][0].item():.3f}"
+                        )
+            except Exception:
+                pass
 
         return return_tuple
 
@@ -227,6 +269,10 @@ class PositionSetpointTaskSim2RealEndToEnd(BaseTask):
         self.task_obs["observations"][:, 3:9] = matrix_to_rotation_6d(or_matr_with_noise)
         self.task_obs["observations"][:, 9:12] = obs_linvel_noisy
         self.task_obs["observations"][:, 12:15] = ang_vel_noisy
+        if self.include_wind_in_obs:
+            # Append wind speed (m/s) as the last observation entry
+            wind = self.obs_dict["wind_speed"].unsqueeze(-1)
+            self.task_obs["observations"][:, -1] = wind.squeeze(-1)
 
         self.task_obs["rewards"] = self.rewards
         self.task_obs["terminations"] = self.terminations
@@ -288,10 +334,23 @@ def compute_reward(
     pos_error[:,2] = pos_error[:,2]*11.
     pos_reward = torch.sum(exp_func(pos_error[:, :3], 10., 10.0), dim=1) + torch.sum(exp_func(pos_error[:, :3], 2.0, 2.0), dim=1)
 
+    # 计算直立奖励
     ups = quat_axis(quats, 2)
     tiltage = 1 - ups[..., 2]
-    upright_reward = exp_func(tiltage, 2.5, 5.0)
+    upright_reward = exp_func(tiltage, 5.0, 10.0)  # 增加gain和exp以提供更强的梯度
 
+    # 添加姿态角度限制的惩罚
+    # angle_limit = 5.0 * torch.pi / 180.0
+    # or_quat = quats[:, [3, 0, 1, 2]]
+    # euler_zyx = matrix_to_euler_angles(quaternion_to_matrix(or_quat), "ZYX")
+    # roll = euler_zyx[:, 2]
+    # pitch = euler_zyx[:, 1]
+    
+    # roll_ratio = torch.abs(roll) / angle_limit
+    # pitch_ratio = torch.abs(pitch) / angle_limit
+    # attitude_penalty = -(exp_func(roll_ratio, 3.0, 3.0) + exp_func(pitch_ratio, 3.0, 3.0))
+
+    # 计算前向对齐奖励
     forw = quat_axis(quats, 0)
     alignment = 1 - forw[..., 0]
     alignment_reward = exp_func(alignment, 6., 5.0)
@@ -300,8 +359,22 @@ def compute_reward(
     vel_reward = torch.sum(exp_func(linvels_err, 1., 5.0), dim=1)
 
     # Penalize deviation from hover thrust per motor
-    action_input_offset = action_input - hover_thrust_per_motor.unsqueeze(1)
-    action_cost = torch.sum(exp_penalty_func(action_input_offset, 0.01, 10.0), dim=1)
+    # Penalize deviation from hover only for motor thrust dimensions
+    if action_input.shape[1] >= 6:
+        thrusts_for_cost = action_input[:, -3:]
+    else:
+        thrusts_for_cost = action_input
+    action_input_offset = thrusts_for_cost - hover_thrust_per_motor.unsqueeze(1)
+    action_cost = torch.sum(
+        exp_penalty_func(action_input_offset, 0.01, 10.0), dim=1
+    )
+
+    # Energy-optimal term (approximate motor power): sum(thrust^(3/2))
+    # For 6D action (servo+thrust), last 3 are motor thrusts; for 3D, all are thrusts.
+    thrusts = action_input[:, -3:] if action_input.shape[1] >= 6 else action_input
+    thrusts_clamped = torch.clamp(thrusts, min=0.0)
+    approx_power = torch.sum(torch.pow(thrusts_clamped, 1.5), dim=1)
+    energy_penalty = 0.02 * approx_power  # weight can be tuned or exposed via config
 
     closer_by_dist = prev_target_dist - target_dist
     towards_goal_reward = torch.where(closer_by_dist >= 0, 10*closer_by_dist, 15*closer_by_dist)
@@ -309,9 +382,17 @@ def compute_reward(
     action_difference = action_input - prev_action
     action_difference_penalty = torch.sum(exp_penalty_func(action_difference, 1.3, 6.0), dim=1)
 
-    reward = towards_goal_reward + (pos_reward * (alignment_reward + vel_reward + angvel_reward + action_difference_penalty) + (angvel_reward + vel_reward + upright_reward + pos_reward + action_cost)) / 100.0
+    # reward = (
+    #     towards_goal_reward
+    #     + (pos_reward * (alignment_reward + vel_reward + angvel_reward + action_difference_penalty)
+    #        + (angvel_reward + vel_reward + upright_reward + pos_reward + action_cost)) / 100.0
+    #     - energy_penalty
+    # )
+    reward = (
+        towards_goal_reward
+        + (pos_reward * (alignment_reward + vel_reward + angvel_reward + action_difference_penalty)) / 100.0
+    )
 
     crashes[:] = torch.where(target_dist > crash_dist, torch.ones_like(crashes), crashes)
 
     return reward, crashes
-

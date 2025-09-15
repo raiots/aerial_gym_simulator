@@ -21,6 +21,8 @@ if EVAL == False:
         return_state_before_reset = False
         reward_parameters = { }
         crash_dist = 1.5
+        # Debug: log first-agent motor thrusts every N steps (0 disables)
+        log_first_agent_thrust_every_n_steps = 0
 
         action_limit_max = torch.ones(action_space_dim,device=device) * 1.2
         action_limit_min = torch.ones(action_space_dim,device=device) * 0.0

@@ -127,6 +127,19 @@ class RobotManagerIGE(BaseManager):
 
         self.robot.init_tensors(self.global_tensor_dict)
 
+        # Expose per-motor thrusts to the global dict for debugging/telemetry
+        try:
+            num_motors = self.robot.control_allocator.cfg.num_motors
+            self.global_tensor_dict["motor_thrusts"] = torch.zeros(
+                (self.num_envs, num_motors), device=self.device, requires_grad=False
+            )
+            self.global_tensor_dict["motor_thrusts_cmd"] = torch.zeros(
+                (self.num_envs, num_motors), device=self.device, requires_grad=False
+            )
+        except Exception:
+            # Fallback if control allocator is not initialized yet
+            pass
+
         if not self.use_warp:
             logger.error("Not using warp. Initializing sensors")
             if self.cfg.sensor_config.enable_lidar:
@@ -487,6 +500,16 @@ class RobotManagerIGE(BaseManager):
         self.prev_actions[:] = self.actions[:]
         self.actions[:] = actions
         self.robot.step(self.actions)
+        # Snapshot current motor thrusts for logging/inspection (first env, etc.)
+        try:
+            self.global_tensor_dict["motor_thrusts"][:] = (
+                self.robot.control_allocator.motor_model.current_motor_thrust
+            )
+            self.global_tensor_dict["motor_thrusts_cmd"][:] = (
+                self.robot.control_allocator.last_ref_motor_thrusts
+            )
+        except Exception:
+            pass
 
     def post_physics_step(self):
         # have this sensor here rather than at capture_sensors

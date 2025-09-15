@@ -47,12 +47,16 @@ class TrirotorWithWind(BaseReconfigurable):
 
     def init_tensors(self, global_tensor_dict):
         super().init_tensors(global_tensor_dict)
+        self.global_tensor_dict = global_tensor_dict
         # Sample wind speeds per env
         self.wind_speed = (
             torch.rand((self.num_envs,), device=self.device) * (self.wind_speed_max - self.wind_speed_min)
             + self.wind_speed_min
         )
         self.wind_vec_world = self.wind_dir_world.expand(self.num_envs, 3) * self.wind_speed.unsqueeze(-1)
+        # Expose wind to global dict for tasks/observers
+        global_tensor_dict["wind_speed"] = self.wind_speed
+        global_tensor_dict["wind_vec_world"] = self.wind_vec_world
 
     def reset_idx(self, env_ids):
         super().reset_idx(env_ids)
@@ -64,6 +68,13 @@ class TrirotorWithWind(BaseReconfigurable):
                 + self.wind_speed_min
             )
             self.wind_vec_world[env_ids] = self.wind_dir_world.expand(len(env_ids), 3) * self.wind_speed[env_ids].unsqueeze(-1)
+            # Update global dict references if present
+            if hasattr(self, "global_tensor_dict") and self.global_tensor_dict is not None:
+                try:
+                    self.global_tensor_dict["wind_speed"][env_ids] = self.wind_speed[env_ids]
+                    self.global_tensor_dict["wind_vec_world"][env_ids] = self.wind_vec_world[env_ids]
+                except Exception:
+                    pass
 
     def apply_wind_aerodynamics(self):
         if not self.wind_enabled:

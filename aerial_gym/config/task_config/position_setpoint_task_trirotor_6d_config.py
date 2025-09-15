@@ -20,6 +20,8 @@ class task_config:
     return_state_before_reset = False
     reward_parameters = {}
     crash_dist = 1.5
+    # Debug: log first-agent motor thrusts every N steps (0 disables)
+    log_first_agent_thrust_every_n_steps = 100
 
     # Per-dimension limits: first 3 are servo angles (rad), next 3 are thrusts (N)
     action_limit_max = torch.tensor([0.35, 0.35, 0.35, 1.2, 1.2, 1.2], device=device)
@@ -29,4 +31,3 @@ class task_config:
         actions_clipped = torch.clamp(actions, -1.0, 1.0)
         # elementwise affine scaling to [min_limit, max_limit]
         return actions_clipped * (max_limit - min_limit) / 2.0 + (max_limit + min_limit) / 2.0
-

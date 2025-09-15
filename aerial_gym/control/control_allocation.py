@@ -45,6 +45,10 @@ class ControlAllocator:
             config=self.cfg.motor_model_config,
             device=self.device,
         )
+        # For telemetry: store last commanded motor thrusts (before motor model dynamics)
+        self.last_ref_motor_thrusts = torch.zeros(
+            (self.num_envs, self.cfg.num_motors), device=self.device
+        )
         logger.warning(
             f"Control allocation does not account for actuator limits. This leads to suboptimal allocation"
         )
@@ -79,6 +83,8 @@ class ControlAllocator:
         return self.output_wrench
 
     def update_motor_thrusts_with_forces(self, ref_forces):
+        # Telemetry: cache the commanded thrusts
+        self.last_ref_motor_thrusts[:] = ref_forces
         current_motor_thrust = self.motor_model.update_motor_thrusts(ref_forces)
         return current_motor_thrust
 
