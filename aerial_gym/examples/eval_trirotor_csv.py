@@ -59,13 +59,36 @@ def main():
     # Prepare CSV
     with open(args.csv, "w", newline="") as f:
         writer = csv.writer(f)
+        # Detect motor thrust tensor availability to size cmd/actual columns
+        mt = env.obs_dict.get("motor_thrusts", None)
+        motor_dim = int(mt.shape[1]) if (mt is not None and mt.ndim == 2) else 0
+
         header = [
             "episode","ep_step","done","reward","t",
             "pos_x","pos_y","pos_z",
             "roll","pitch","yaw",
             "vel_x","vel_y","vel_z",
             "ang_x","ang_y","ang_z",
-        ] + [f"act_{i}" for i in range(act_dim)]
+        ]
+        # Raw policy outputs (mu) for next step
+        header += [f"act_{i}" for i in range(act_dim)]
+        # Also log clipped and scaled versions derived from mu
+        header += [f"act_clipped_{i}" for i in range(act_dim)]
+        header += [f"act_scaled_{i}" for i in range(act_dim)]
+        # If it's a 6D action space, split into servo (rad/deg) and motor (N)
+        if act_dim >= 6:
+            header += [f"servo_next_{i}_rad" for i in range(3)]
+            header += [f"servo_next_{i}_deg" for i in range(3)]
+            header += [f"motor_next_{i}_N" for i in range(3)]
+            # Also log last applied servo targets from sim, if available
+            header += [f"servo_cmd_last_{i}_rad" for i in range(3)]
+        else:
+            # 3D action space → all actions are motors
+            header += [f"motor_next_{i}_N" for i in range(act_dim)]
+        # Commanded and actual motor thrusts from the simulator (last step)
+        if motor_dim > 0:
+            header += [f"motor_cmd_last_{i}_N" for i in range(motor_dim)]
+            header += [f"motor_actual_last_{i}_N" for i in range(motor_dim)]
         writer.writerow(header)
 
         t0 = time.time()
@@ -87,6 +110,46 @@ def main():
                 rpy = quat_xyz_to_rpy_zxy(quat)
                 lin = od["robot_linvel"][..., :3].detach().cpu()
                 ang = od["robot_body_angvel"][..., :3].detach().cpu()
+                # For action post-processing (clipped/scaled) we reuse task_config mapping
+                # Note: scaled corresponds to physical units (servo [rad], motor [N])
+                act_mu = actions.detach()
+                act_clipped = torch.clamp(act_mu, -1.0, 1.0)
+                # Ensure device alignment with task limits
+                lim_min = env.task_config.action_limit_min
+                lim_max = env.task_config.action_limit_max
+                act_scaled = env.task_config.process_actions_for_task(
+                    act_clipped.to(lim_min.device), lim_min, lim_max
+                )
+
+                # Split into servo and motor for 6D; else all are motors
+                servo_next_rad = None
+                servo_next_deg = None
+                motor_next_N = None
+                if act_dim >= 6:
+                    servo_next_rad = act_scaled[..., 0:3].detach().cpu()
+                    servo_next_deg = servo_next_rad * 180.0 / np.pi
+                    motor_next_N = act_scaled[..., 3:6].detach().cpu()
+                else:
+                    motor_next_N = act_scaled.detach().cpu()
+
+                # DoF servo command actually applied in last step (if available)
+                dof_cmd = None
+                try:
+                    dof_cmd_tensor = env.sim_env.global_tensor_dict.get(
+                        "dof_position_setpoint_tensor", None
+                    )
+                    if dof_cmd_tensor is not None and dof_cmd_tensor.numel() > 0:
+                        dof_cmd = dof_cmd_tensor.detach().cpu()
+                except Exception:
+                    dof_cmd = None
+
+                # Commanded/actual motor thrusts from simulator (last step)
+                mt_cmd = od.get("motor_thrusts_cmd", None)
+                mt_act = od.get("motor_thrusts", None)
+                if mt_cmd is not None:
+                    mt_cmd = mt_cmd.detach().cpu()
+                if mt_act is not None:
+                    mt_act = mt_act.detach().cpu()
 
                 # Log only env 0 for clarity; extend as needed
                 idx = 0
@@ -98,7 +161,34 @@ def main():
                     f"{rpy[idx,0].item():.6f}", f"{rpy[idx,1].item():.6f}", f"{rpy[idx,2].item():.6f}",
                     f"{lin[idx,0].item():.6f}", f"{lin[idx,1].item():.6f}", f"{lin[idx,2].item():.6f}",
                     f"{ang[idx,0].item():.6f}", f"{ang[idx,1].item():.6f}", f"{ang[idx,2].item():.6f}",
-                ] + [f"{actions[idx,i].item():.6f}" for i in range(act_dim)]
+                ]
+                # Raw mu for next step (kept as legacy act_i columns)
+                row += [f"{act_mu[idx,i].item():.6f}" for i in range(act_dim)]
+                # Clipped and scaled versions
+                row += [f"{act_clipped[idx,i].item():.6f}" for i in range(act_dim)]
+                row += [f"{act_scaled[idx,i].item():.6f}" for i in range(act_dim)]
+                # Servo/motor split
+                if act_dim >= 6:
+                    row += [f"{servo_next_rad[idx,i].item():.6f}" for i in range(3)]
+                    row += [f"{servo_next_deg[idx,i].item():.6f}" for i in range(3)]
+                    row += [f"{motor_next_N[idx,i].item():.6f}" for i in range(3)]
+                    if dof_cmd is not None:
+                        row += [f"{dof_cmd[idx,i].item():.6f}" for i in range(3)]
+                    else:
+                        row += ["" for _ in range(3)]
+                else:
+                    row += [f"{motor_next_N[idx,i].item():.6f}" for i in range(act_dim)]
+
+                # Motor thrusts commanded/actual from simulator (last step)
+                if motor_dim > 0:
+                    if mt_cmd is not None:
+                        row += [f"{mt_cmd[idx,i].item():.6f}" for i in range(motor_dim)]
+                    else:
+                        row += ["" for _ in range(motor_dim)]
+                    if mt_act is not None:
+                        row += [f"{mt_act[idx,i].item():.6f}" for i in range(motor_dim)]
+                    else:
+                        row += ["" for _ in range(motor_dim)]
                 writer.writerow(row)
 
                 # Update episode counters after logging this row
