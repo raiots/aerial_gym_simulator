@@ -358,23 +358,24 @@ def compute_reward(
     angvel_reward = torch.sum(exp_func(angvels_err, .3 , 10.0), dim=1)
     vel_reward = torch.sum(exp_func(linvels_err, 1., 5.0), dim=1)
 
-    # Penalize deviation from hover thrust per motor
-    # Penalize deviation from hover only for motor thrust dimensions
+    # Penalize deviation from hover thrust per motor (normalized by hover)
+    # Use last 3 dims as thrusts for 6D actions; else use all dims
     if action_input.shape[1] >= 6:
         thrusts_for_cost = action_input[:, -3:]
     else:
         thrusts_for_cost = action_input
-    action_input_offset = thrusts_for_cost - hover_thrust_per_motor.unsqueeze(1)
-    action_cost = torch.sum(
-        exp_penalty_func(action_input_offset, 0.01, 10.0), dim=1
+    thrusts_clamped = torch.clamp(thrusts_for_cost, min=0.0)
+    hover = hover_thrust_per_motor.unsqueeze(1)
+    hover = torch.clamp(hover, min=1e-6)
+    norm_dev = (thrusts_clamped - hover) / hover
+    # Smooth penalty that saturates for very large deviations
+    hover_deviation_penalty = 0.05 * torch.sum(
+        -exp_penalty_func(norm_dev, 1.0, 4.0), dim=1
     )
 
-    # Energy-optimal term (approximate motor power): sum(thrust^(3/2))
-    # For 6D action (servo+thrust), last 3 are motor thrusts; for 3D, all are thrusts.
-    thrusts = action_input[:, -3:] if action_input.shape[1] >= 6 else action_input
-    thrusts_clamped = torch.clamp(thrusts, min=0.0)
+    # Energy cost (approximate motor power): sum(thrust^(3/2)) with small weight
     approx_power = torch.sum(torch.pow(thrusts_clamped, 1.5), dim=1)
-    energy_penalty = 0.02 * approx_power  # weight can be tuned or exposed via config
+    energy_penalty = 1e-3 * approx_power  # tune via config if needed
 
     closer_by_dist = prev_target_dist - target_dist
     towards_goal_reward = torch.where(closer_by_dist >= 0, 10*closer_by_dist, 15*closer_by_dist)
@@ -390,7 +391,11 @@ def compute_reward(
     # )
     reward = (
         towards_goal_reward
-        + (pos_reward * (alignment_reward + vel_reward + angvel_reward + action_difference_penalty)) / 100.0
+        + (pos_reward * (alignment_reward + vel_reward + angvel_reward)) / 100.0
+        + 0.1 * upright_reward
+        - hover_deviation_penalty
+        - energy_penalty
+        - 0.1 * action_difference_penalty
     )
 
     crashes[:] = torch.where(target_dist > crash_dist, torch.ones_like(crashes), crashes)

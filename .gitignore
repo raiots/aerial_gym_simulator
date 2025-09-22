@@ -12,3 +12,5 @@ train_dir/
 venv/
 wandb/
 .vscode/
+*.pdf
+*.csv

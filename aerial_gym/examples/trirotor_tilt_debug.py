@@ -39,17 +39,17 @@ if __name__ == "__main__":
 
     logger.info("Phase 1: zero thrust, zero tilt.")
     set_servo_targets(env_manager, 0.0)
-    for _ in range(200):
+    for _ in range(400):
         env_manager.step(actions=actions)
 
     logger.info("Phase 2: zero thrust, apply uniform tilt.")
     set_servo_targets(env_manager, args.tilt)
-    for _ in range(200):
+    for _ in range(1800):
         env_manager.step(actions=actions)
 
     logger.info("Phase 3: small thrust, uniform tilt -> observe motion.")
     actions[:] = 0.35  # small thrust on all 3 motors
-    for i in range(400):
+    for i in range(800):
         env_manager.step(actions=actions)
         if i % 50 == 0:
             pos = env_manager.global_tensor_dict["robot_position"][0].tolist()

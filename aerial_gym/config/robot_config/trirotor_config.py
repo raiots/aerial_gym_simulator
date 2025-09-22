@@ -170,21 +170,27 @@ class TrirotorCfg:
 
         class motor_model_config:
             use_rps = True
-            motor_thrust_constant_min = 0.00001286412
-            motor_thrust_constant_max = 0.00001286412
-            motor_time_constant_increasing_min = 0.047
-            motor_time_constant_increasing_max = 0.047
-            motor_time_constant_decreasing_min = 0.047
-            motor_time_constant_decreasing_max = 0.047
-            max_thrust = 1.2  # Increased from 1.2 to allow hover + control authority
-            min_thrust = 0.0  # Reduced from 0.2 to allow zero thrust
+            # Align with gz-sim MulticopterMotorModel plugin parameters
+            # motorConstant -> thrust_constant (N/(rad/s)^2)
+            motor_thrust_constant_min = 2e-05
+            motor_thrust_constant_max = 2e-05
+            # timeConstantUp/Down
+            motor_time_constant_increasing_min = 0.0125
+            motor_time_constant_increasing_max = 0.0125
+            motor_time_constant_decreasing_min = 0.025
+            motor_time_constant_decreasing_max = 0.025
+            # maxRotVelocity -> max_thrust via Ct * omega_max^2
+            #  Ct=2e-05, omega_max=1500 rad/s => max_thrust ≈ 45 N per motor
+            max_thrust = 45.0
+            min_thrust = 0.0
             max_thrust_rate = 100000.0
-            thrust_to_torque_ratio = 0.01
+            # momentConstant -> thrust_to_torque_ratio
+            thrust_to_torque_ratio = 0.06
             use_discrete_approximation = True
             integration_scheme = "rk4" #"euler"
 
     class aerodynamic_config:
-        enable_wind = True
+        enable_wind = False
         air_density = 1.225  # kg/m^3
         reference_area = 0.005  # m^2, effective frontal area
         # Lift/drag simple model coefficients

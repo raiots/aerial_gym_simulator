@@ -24,7 +24,7 @@ class task_config:
     log_first_agent_thrust_every_n_steps = 100
 
     # Per-dimension limits: first 3 are servo angles (rad), next 3 are thrusts (N)
-    action_limit_max = torch.tensor([0.35, 0.35, 0.35, 1.2, 1.2, 1.2], device=device)
+    action_limit_max = torch.tensor([0.35, 0.35, 0.35, 45, 45, 45], device=device)
     action_limit_min = torch.tensor([-0.35, -0.35, -0.35, 0.0, 0.0, 0.0], device=device)
 
     def process_actions_for_task(actions, min_limit, max_limit):
