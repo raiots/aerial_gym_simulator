@@ -10,7 +10,7 @@ class e2eNetwork(nn.Module):
         super(e2eNetwork, self).__init__()
         self.fc1 = nn.Linear(15, 64)  # Input layer (15 inputs, position error, velocity, attitude (6D), angular velocity)
         self.fc2 = nn.Linear(64, 32)
-        self.fc3 = nn.Linear(32, 4) # Output layer (number of motors)
+        self.fc3 = nn.Linear(32, 6) # Output layer (number of motors)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x)) # Make sure to add correct activation functions
@@ -21,7 +21,7 @@ class e2eNetwork(nn.Module):
 def convert_network():
     print("Converting network...")
     # Load the state dictionary. TODO: Change the model name to match the one you have trained
-    state_dict = torch.load("/programming/gen_ppo.pth", map_location=torch.device('cpu'))
+    state_dict = torch.load("/programming/trirotor_6d.pth", map_location=torch.device('cpu'))
     # Extract the model state dictionary
     model_state_dict = state_dict["model"]
 

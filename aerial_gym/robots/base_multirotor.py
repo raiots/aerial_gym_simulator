@@ -212,7 +212,7 @@ class BaseMultirotor(BaseRobot):
         """
         Clip the action tensor to the range of the controller inputs.
         """
-        self.action_tensor[:] = torch.clamp(self.action_tensor, -10.0, 10.0)
+        self.action_tensor[:] = torch.clamp(self.action_tensor, -45.0, 45.0)
 
     def apply_disturbance(self):
         if not self.cfg.disturbance.enable_disturbance:
