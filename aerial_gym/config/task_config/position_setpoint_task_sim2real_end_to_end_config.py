@@ -7,7 +7,7 @@ if EVAL == False:
         seed = 56 #16 #26 #36 #46 #56
         sim_name = "base_sim"
         env_name = "empty_env"
-        robot_name = "tinyprop"
+        robot_name = "lmf1"
         controller_name = "no_control"
         args = {}
         num_envs = 4096
@@ -36,7 +36,7 @@ else:
         seed = 41
         sim_name = "base_sim_4ms"
         env_name = "empty_env"
-        robot_name = "tinyprop"
+        robot_name = "lmf1"
         controller_name = "no_control"
         args = {}
         num_envs = 4096

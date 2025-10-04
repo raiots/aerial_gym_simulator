@@ -9,3 +9,10 @@ runs/
 nn/
 
 train_dir/
+*venv/
+*runs/
+*wandb/
+.vscode/
+*results/
+*.csv
+*.pdf
