@@ -22,16 +22,16 @@ params:
           val: 0
         fixed_sigma: True
     mlp:
-      units: [64,32,32]
+      units: [64,32]
       d2rl: False
-      activation: elu
+      activation: relu
       initializer:
         name: default
         scale: 2
   config:
     env_name: position_setpoint_task_sim2real
     env_config:
-      num_envs: 8192
+      num_envs: 4096
 
     name: gen_ppo
     reward_shaper:

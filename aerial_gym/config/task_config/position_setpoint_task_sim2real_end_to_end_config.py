@@ -20,10 +20,10 @@ if EVAL == False:
         episode_len_steps = 600
         return_state_before_reset = False
         reward_parameters = { }
-        crash_dist = 1.5
+        crash_dist = 6.5
 
-        action_limit_max = torch.ones(action_space_dim,device=device) * 1.2
-        action_limit_min = torch.ones(action_space_dim,device=device) * 0.2
+        action_limit_max = torch.ones(action_space_dim,device=device) * 6.0
+        action_limit_min = torch.ones(action_space_dim,device=device) * 0.0
 
         def process_actions_for_task(actions, min_limit, max_limit):
             actions_clipped = torch.clamp(actions, -1, 1)
@@ -52,8 +52,8 @@ else:
 
         crash_dist = 5.5
 
-        action_limit_max = torch.ones(action_space_dim,device=device) * 1.2
-        action_limit_min = torch.ones(action_space_dim,device=device) * 0.2
+        action_limit_max = torch.ones(action_space_dim,device=device) * 6.0
+        action_limit_min = torch.ones(action_space_dim,device=device) * 0.0
 
         def process_actions_for_task(actions, min_limit, max_limit):
             actions_clipped = torch.clamp(actions, -1, 1)
