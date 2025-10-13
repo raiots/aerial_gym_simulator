@@ -19,7 +19,7 @@ class task_config:
     episode_len_steps = 600
     return_state_before_reset = False
     reward_parameters = {}
-    crash_dist = 6.5
+    crash_dist = 1.5
     # Debug: log first-agent motor thrusts every N steps (0 disables)
     log_first_agent_thrust_every_n_steps = 100
 
