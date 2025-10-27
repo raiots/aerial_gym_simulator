@@ -181,7 +181,7 @@ class TrirotorCfg:
             motor_time_constant_decreasing_max = 0.025
             # maxRotVelocity -> max_thrust via Ct * omega_max^2
             #  Ct=2e-05, omega_max=1500 rad/s => max_thrust ≈ 45 N per motor
-            max_thrust = 45.0
+            max_thrust = 20.0
             min_thrust = 0.0
             max_thrust_rate = 100000.0
             # momentConstant -> thrust_to_torque_ratio
