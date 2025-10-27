@@ -2,19 +2,39 @@ from collections import OrderedDict
 import re
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
+
+def _make_activation(name: str) -> nn.Module:
+    name = (name or "elu").lower()
+    if name in ("elu",):
+        return nn.ELU()
+    if name in ("relu",):
+        return nn.ReLU()
+    if name in ("tanh",):
+        return nn.Tanh()
+    if name in ("silu", "swish"):  # rl-games uses SiLU naming
+        return nn.SiLU()
+    if name in ("gelu",):
+        return nn.GELU()
+    if name in ("leaky_relu", "leakyrelu"):
+        return nn.LeakyReLU()
+    if name in ("none", "identity", "linear"):
+        return nn.Identity()
+    raise ValueError(f"Unsupported MLP activation '{name}' from checkpoint")
 
 
 class MLP(nn.Module):
     """
     Flexible MLP that constructs its architecture from an RL-Games checkpoint.
     It inspects actor_mlp layer shapes in the checkpoint and builds a matching
-    Sequential so that state_dict loading succeeds regardless of hidden sizes.
+    Sequential so that state_dict loading succeeds regardless of hidden sizes
+    or activation types.
     """
 
-    def __init__(self, input_dim, output_dim, path):
+    def __init__(self, input_dim, output_dim, path, activation: str = "elu"):
         super().__init__()
         self.network = None
+        self.activation_name = activation or "elu"
         self._create_and_load_from_checkpoint(path)
 
     def _create_and_load_from_checkpoint(self, path):
@@ -53,6 +73,7 @@ class MLP(nn.Module):
         if len(linear_ids) == 0 or ("mu.weight" not in od_raw):
             raise RuntimeError("Could not infer actor MLP structure from checkpoint")
 
+        activation = _make_activation(self.activation_name)
         # Build layers according to discovered shapes
         layers = []
         activation_count = 0
@@ -64,8 +85,11 @@ class MLP(nn.Module):
             out_dim = W.shape[0]
             lin = nn.Linear(in_dim, out_dim)
             layers.append((f"{lid}", lin))
-            layers.append((f"elu{activation_count+1}", nn.ELU()))
-            activation_count += 1
+            if not isinstance(activation, nn.Identity):
+                # instantiate a fresh activation module per layer
+                act = _make_activation(self.activation_name)
+                layers.append((f"act{activation_count+1}", act))
+                activation_count += 1
         # Output head 'mu'
         mu_W = od_raw["mu.weight"]
         mu_in = mu_W.shape[1]
@@ -76,7 +100,10 @@ class MLP(nn.Module):
         self.network = nn.Sequential(OrderedDict(layers))
         # Load weights strictly
         self.network.load_state_dict(od_raw, strict=True)
-        print(f"Loaded actor MLP from {path} with layers: {[name for name,_ in layers]}")
+        layer_names = [name for name, _ in layers]
+        print(
+            f"Loaded actor MLP from {path} with activation '{self.activation_name}' and layers: {layer_names}"
+        )
 
     def forward(self, x):
         return self.network(x)

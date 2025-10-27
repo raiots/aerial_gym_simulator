@@ -1,6 +1,9 @@
 import argparse
 import time
 import csv
+from pathlib import Path
+from typing import Optional
+
 import numpy as np
 
 from aerial_gym.utils.logging import CustomLogger
@@ -8,6 +11,11 @@ from aerial_gym.registry.task_registry import task_registry
 from aerial_gym.examples.rl_games_example.rl_games_inference import MLP
 import torch
 from pytorch3d.transforms import quaternion_to_matrix, matrix_to_euler_angles
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover - yaml is optional at runtime
+    yaml = None
 
 
 logger = CustomLogger("eval_trirotor_csv")
@@ -24,7 +32,48 @@ def parse_args():
     p.add_argument("--device", type=str, default="cuda:0")
     p.add_argument("--steps", type=int, default=3000)
     p.add_argument("--csv", type=str, default="trirotor_eval_log.csv")
+    p.add_argument("--actor-activation", dest="actor_activation", type=str, default=None,
+                   help="Actor MLP hidden activation override (e.g., relu, elu).")
+    p.add_argument("--ppo-config", dest="ppo_config", type=str, default=None,
+                   help="Optional RL-Games YAML path to auto-detect activation.")
     return p.parse_args()
+
+
+def detect_activation_from_config(checkpoint_path: str, cfg_override: Optional[str]) -> Optional[str]:
+    """Try to infer the actor activation from an rl-games YAML config."""
+
+    if yaml is None:
+        logger.debug("PyYAML unavailable; cannot infer activation from config.")
+        return None
+
+    candidates = []
+    if cfg_override:
+        candidates.append(Path(cfg_override))
+
+    ckpt_stem = Path(checkpoint_path).stem
+    rl_cfg_dir = Path(__file__).resolve().parents[2] / "rl_training" / "rl_games"
+    if rl_cfg_dir.exists():
+        candidates.extend(sorted(rl_cfg_dir.glob(f"*{ckpt_stem}*.yaml")))
+
+    for cfg_path in candidates:
+        if not cfg_path.exists():
+            continue
+        try:
+            with cfg_path.open("r") as fh:
+                cfg = yaml.safe_load(fh)
+            activation = (
+                cfg.get("params", {})
+                .get("network", {})
+                .get("mlp", {})
+                .get("activation")
+            )
+            if activation:
+                logger.info(f"Inferred actor activation '{activation}' from {cfg_path}")
+                return activation
+        except Exception as exc:  # pragma: no cover - diagnostic logging only
+            logger.warning(f"Failed to parse activation from {cfg_path}: {exc}")
+
+    return None
 
 
 def quat_xyz_to_rpy_zxy(quat_tensor):
@@ -47,11 +96,23 @@ def main():
     env.reset()
 
     obs_dim = env.task_config.observation_space_dim
+    activation = args.actor_activation
+    if activation:
+        logger.info(f"Using actor activation override '{activation}'")
+    else:
+        inferred_activation = detect_activation_from_config(args.checkpoint, args.ppo_config)
+        if inferred_activation:
+            activation = inferred_activation
+        else:
+            activation = "elu"
+            logger.warning(
+                "Falling back to default actor activation 'elu'. Provide --actor-activation or --ppo-config to override."
+            )
     act_dim = env.task_config.action_space_dim
     device = torch.device(args.device)
 
     # Load policy (actor MLP) from RL-Games checkpoint
-    model = MLP(obs_dim, act_dim, args.checkpoint).to(device).eval()
+    model = MLP(obs_dim, act_dim, args.checkpoint, activation=activation).to(device).eval()
 
     actions = torch.zeros((env.sim_env.num_envs, act_dim), device=device)
     logger.info(f"Starting evaluation for {args.steps} steps; logging to {args.csv}")
