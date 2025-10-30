@@ -337,7 +337,7 @@ def compute_reward(
     # 计算直立奖励
     ups = quat_axis(quats, 2)
     tiltage = 1 - ups[..., 2]
-    upright_reward = exp_func(tiltage, 5.0, 10.0)  # 增加gain和exp以提供更强的梯度
+    upright_reward = exp_func(tiltage, 8.0, 800.0)  # 增加gain和exp以提供更强的梯度
 
     # 添加姿态角度限制的惩罚
     # angle_limit = 5.0 * torch.pi / 180.0
@@ -353,7 +353,7 @@ def compute_reward(
     # 计算前向对齐奖励
     forw = quat_axis(quats, 0)
     alignment = 1 - forw[..., 0]
-    alignment_reward = exp_func(alignment, 6., 5.0)
+    alignment_reward = exp_func(alignment, 10., 5.0)
 
     angvel_reward = torch.sum(exp_func(angvels_err, .3 , 10.0), dim=1)
     vel_reward = torch.sum(exp_func(linvels_err, 1., 5.0), dim=1)

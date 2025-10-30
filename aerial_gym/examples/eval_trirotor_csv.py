@@ -110,6 +110,7 @@ def main():
             )
     act_dim = env.task_config.action_space_dim
     device = torch.device(args.device)
+    include_wind = "wind_speed" in env.obs_dict
 
     # Load policy (actor MLP) from RL-Games checkpoint
     model = MLP(obs_dim, act_dim, args.checkpoint, activation=activation).to(device).eval()
@@ -146,7 +147,11 @@ def main():
         else:
             # 3D action space → all actions are motors
             header += [f"motor_next_{i}_N" for i in range(act_dim)]
-        # Commanded and actual motor thrusts from the simulator (last step)
+
+        if include_wind:
+            header.append("wind_speed")
+        header += [f"obs_{i}" for i in range(obs_dim)]
+
         if motor_dim > 0:
             header += [f"motor_cmd_last_{i}_N" for i in range(motor_dim)]
             header += [f"motor_actual_last_{i}_N" for i in range(motor_dim)]
@@ -163,6 +168,7 @@ def main():
                 # Compute new actions from observations
                 obs_tensor = obs["observations"].to(device)
                 actions[:] = model.forward(obs_tensor)
+                obs_cpu = obs_tensor.detach().cpu()
 
                 # Extract state (env.obs_dict holds tensors from sim)
                 od = env.obs_dict
@@ -239,6 +245,14 @@ def main():
                         row += ["" for _ in range(3)]
                 else:
                     row += [f"{motor_next_N[idx,i].item():.6f}" for i in range(act_dim)]
+
+                if include_wind:
+                    wind_tensor = env.obs_dict.get("wind_speed", None)
+                    if wind_tensor is not None and wind_tensor.numel() > 0:
+                        row.append(f"{wind_tensor.detach().cpu()[idx].item():.6f}")
+                    else:
+                        row.append("")
+                row += [f"{obs_cpu[idx, i].item():.6f}" for i in range(obs_dim)]
 
                 # Motor thrusts commanded/actual from simulator (last step)
                 if motor_dim > 0:

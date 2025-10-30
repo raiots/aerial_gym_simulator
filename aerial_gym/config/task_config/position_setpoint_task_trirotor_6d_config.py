@@ -5,7 +5,7 @@ class task_config:
     seed = 56
     sim_name = "base_sim"
     env_name = "empty_env"
-    robot_name = "trirotor"
+    robot_name = "trirotor_wind"
     controller_name = "servo_thrust_split_trirotor"
     args = {}
     num_envs = 32
@@ -15,7 +15,7 @@ class task_config:
     privileged_observation_space_dim = 0
     # 6 actions: [servo0, servo1, servo2, thrust0, thrust1, thrust2]
     action_space_dim = 6
-    observation_space_dim = 15
+    observation_space_dim = 16
     episode_len_steps = 600
     return_state_before_reset = False
     reward_parameters = {}
